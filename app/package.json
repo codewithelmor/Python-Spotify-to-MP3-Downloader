@@ -23,10 +23,12 @@
     "appId": "com.example.spotifytomp3",
     "productName": "Spotify to MP3",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "assets"
     },
     "files": [
-      "out/**/*"
+      "out/**/*",
+      "assets/**/*"
     ],
     "extraResources": [
       {
@@ -39,6 +41,7 @@
       }
     ],
     "win": {
+      "icon": "assets/icon.ico",
       "target": [
         "nsis"
       ]
@@ -48,12 +51,14 @@
       "allowToChangeInstallationDirectory": true
     },
     "mac": {
+      "icon": "assets/icon.png",
       "target": [
         "dmg"
       ],
       "category": "public.app-category.music"
     },
     "linux": {
+      "icon": "assets/icons",
       "target": [
         "AppImage",
         "deb"

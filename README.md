@@ -217,6 +217,17 @@ Python-Spotify-to-MP3-Downloader/
 │   └── workflows
 │       └── build.yml
 ├── app
+│   ├── assets
+│   │   ├── icons
+│   │   │   ├── 128x128.png
+│   │   │   ├── 16x16.png
+│   │   │   ├── 256x256.png
+│   │   │   ├── 32x32.png
+│   │   │   ├── 48x48.png
+│   │   │   ├── 512x512.png
+│   │   │   └── 64x64.png
+│   │   ├── icon.ico
+│   │   └── icon.png
 │   ├── scripts
 │   │   └── copy-static.js
 │   ├── src
