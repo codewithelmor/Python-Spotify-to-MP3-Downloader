@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' https: data:; style-src 'self'; script-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spotify to MP3</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Spotify to MP3</h1>
+      <p class="sub">Paste a track, album or playlist link. Playlists must be public.</p>
+    </header>
+
+    <section class="row">
+      <input id="url" type="text" placeholder="https://open.spotify.com/playlist/..." spellcheck="false">
+      <button id="previewBtn" class="primary">Load</button>
+    </section>
+    <p id="message" class="message" hidden></p>
+
+    <section id="listSection" hidden>
+      <div class="list-head">
+        <div>
+          <h2 id="listTitle"></h2>
+          <span id="listCount" class="sub"></span>
+        </div>
+        <label class="check"><input id="selectAll" type="checkbox" checked> Select all</label>
+      </div>
+      <ul id="tracks"></ul>
+
+      <div class="options">
+        <label>Quality
+          <select id="bitrate">
+            <option value="128">128 kbps</option>
+            <option value="192">192 kbps</option>
+            <option value="256">256 kbps</option>
+            <option value="320">320 kbps</option>
+          </select>
+        </label>
+        <label class="check"><input id="enrich" type="checkbox" checked> Extra metadata (slower)</label>
+        <div class="folder">
+          <span id="folder" title=""></span>
+          <button id="folderBtn">Change…</button>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="downloadBtn" class="primary">Download</button>
+        <button id="cancelBtn" hidden>Cancel</button>
+      </div>
+    </section>
+
+    <section id="progressSection" hidden>
+      <div class="bar"><div id="overallBar"></div></div>
+      <p id="overallText" class="sub"></p>
+      <div class="bar thin"><div id="trackBar"></div></div>
+      <p id="trackText" class="sub"></p>
+      <details>
+        <summary>Log</summary>
+        <pre id="log"></pre>
+      </details>
+      <div id="summary" hidden>
+        <p id="summaryText"></p>
+        <ul id="failed"></ul>
+        <button id="openBtn" class="primary">Open folder</button>
+      </div>
+    </section>
+  </main>
+  <script src="renderer.js"></script>
+</body>
+</html>

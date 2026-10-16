@@ -76,68 +76,40 @@ def build_ssl_context():
 SSL_CONTEXT = build_ssl_context()
 
 
-# ----------------------------- User prompts --------------------------------
 
-def get_valid_directory():
-    """Prompts the user for a download folder and ensures it exists."""
-    while True:
-        directory = input("\nEnter target directory to save MP3 (Leave blank for current folder): ").strip()
 
-        if not directory:
-            return "."  # Current directory
+# ------------------------------ Events -------------------------------------
+# The CLI leaves the listener unset and gets plain console output. A host program
+# (the Electron app, via backend.py) installs a listener to receive structured events.
 
-        # Clean up path and expand user home directory symbols like ~
-        directory = os.path.abspath(os.path.expanduser(directory))
+_listener = None
+_cancel_event = None
 
-        try:
-            if not os.path.exists(directory):
-                os.makedirs(directory)
-                print(f"📁 Created folder: {directory}")
-            return directory
-        except Exception as e:
-            print(f"❌ Invalid directory or permission denied. Error: {e}. Please try again.")
 
-def get_valid_bitrate():
-    """Prompts the user for a bitrate and validates the input."""
-    print("\nSelect your desired MP3 quality (bitrate):")
-    print("1. 128 kbps (Standard quality / smaller file)")
-    print("2. 192 kbps (High quality - Recommended)")
-    print("3. 256 kbps (Very high quality)")
-    print("4. 320 kbps (Highest quality / larger file)")
-    print("5. Custom bitrate")
+class Cancelled(Exception):
+    """Raised inside a download when the host asked to stop."""
 
-    while True:
-        choice = input("Enter choice (1-5) or directly enter a value (e.g., 256): ").strip()
 
-        if choice == '1':
-            return '128'
-        elif choice == '2':
-            return '192'
-        elif choice == '3':
-            return '256'
-        elif choice == '4':
-            return '320'
-        elif choice == '5':
-            custom = input("Enter custom bitrate in kbps (e.g., 160): ").strip()
-            if custom.isdigit():
-                return custom
-        elif choice.isdigit():
-            return choice
+def set_listener(fn):
+    """Install fn(event_name, data_dict) to receive events, or None for console output."""
+    global _listener
+    _listener = fn
 
-        print("❌ Invalid input. Please enter a number between 1-5 or a valid numeric bitrate.")
+def emit(event, **data):
+    if _listener:
+        _listener(event, data)
 
-def get_yes_no(prompt, default=True):
-    """Simple yes/no prompt; Enter accepts the default."""
-    hint = "Y/n" if default else "y/N"
-    while True:
-        answer = input(f"{prompt} [{hint}]: ").strip().lower()
-        if not answer:
-            return default
-        if answer in ('y', 'yes'):
-            return True
-        if answer in ('n', 'no'):
-            return False
-        print("❌ Please answer y or n.")
+def log(message):
+    """Human-readable status line: printed by the CLI, sent as a 'log' event to a host."""
+    if _listener:
+        _listener('log', {'message': message.strip()})
+    else:
+        print(message)
+
+def _check_cancel():
+    if _cancel_event is not None and _cancel_event.is_set():
+        raise Cancelled()
+
 
 def sanitize_folder_name(name):
     """Strips characters that are unsafe for folder/file names across OSes."""
@@ -801,7 +773,7 @@ def enrich_track(track):
         try:
             found = lookup(track)
         except Exception as e:
-            print(f"   ⚠️ {name} lookup skipped: {e}")
+            log(f"   ⚠️ {name} lookup skipped: {e}")
             continue
         if found:
             merge_found(track, found, name)
@@ -824,7 +796,7 @@ def download_cover(url):
             with urllib.request.urlopen(req, timeout=20, context=SSL_CONTEXT) as resp:
                 _cover_cache[url] = resp.read()
         except Exception as e:
-            print(f"   ⚠️ Could not download album art: {e}")
+            log(f"   ⚠️ Could not download album art: {e}")
             _cover_cache[url] = None
     return _cover_cache[url]
 
@@ -954,11 +926,22 @@ def write_id3_tags(mp3_path, track, cover_bytes):
     return written
 
 
+
 # ------------------------------ Downloading --------------------------------
 
-def build_ydl_opts(bitrate, output_dir):
+def _progress_hook(d):
+    """yt-dlp progress hook: reports download percent and aborts on cancel."""
+    _check_cancel()
+    if d.get('status') == 'downloading':
+        total = d.get('total_bytes') or d.get('total_bytes_estimate')
+        if total:
+            emit('progress', percent=round(d.get('downloaded_bytes', 0) / total * 100, 1))
+    elif d.get('status') == 'finished':
+        emit('progress', percent=100.0, converting=True)
+
+def build_ydl_opts(bitrate, output_dir, ffmpeg_dir=None):
     """Builds the yt-dlp options dict for a given bitrate/output folder."""
-    return {
+    opts = {
         'format': 'bestaudio/best',
         'outtmpl': os.path.join(output_dir, '%(artist)s - %(title)s.%(ext)s'),
         'postprocessors': [
@@ -968,9 +951,14 @@ def build_ydl_opts(bitrate, output_dir):
                 'preferredquality': bitrate,
             },
         ],
-        'quiet': False,
+        'quiet': _listener is not None,   # a host gets structured progress instead
+        'noprogress': _listener is not None,
+        'progress_hooks': [_progress_hook],
         'ignoreerrors': True,
     }
+    if ffmpeg_dir:
+        opts['ffmpeg_location'] = ffmpeg_dir   # folder holding ffmpeg and ffprobe
+    return opts
 
 def find_audio_source(search_ydl, track):
     """
@@ -994,12 +982,13 @@ def find_audio_source(search_ydl, track):
         best = min(topic or close, key=diff)
     else:
         best = min(candidates, key=diff)
-        print(f"   ⚠️ No result within {DURATION_TOLERANCE}s of the Spotify duration; using closest match.")
+        log(f"   ⚠️ No result within {DURATION_TOLERANCE}s of the Spotify duration; using closest match.")
 
     return best.get('url') or f"https://www.youtube.com/watch?v={best['id']}"
 
 def download_track(ydl, search_ydl, track, enrich=True):
     """Downloads one Spotify track as MP3, then enriches, tags it and embeds the album art."""
+    _check_cancel()
     source_url = find_audio_source(search_ydl, track)
     if not source_url:
         raise RuntimeError("no matching audio source found")
@@ -1019,70 +1008,98 @@ def download_track(ydl, search_ydl, track, enrich=True):
         raise RuntimeError("MP3 conversion did not produce a file (is FFmpeg installed?)")
 
     if enrich:
-        print("   🔎 Gathering extra metadata (Deezer, iTunes, MusicBrainz, lyrics)...")
+        log("   🔎 Gathering extra metadata (Deezer, iTunes, MusicBrainz, lyrics)...")
         enrich_track(track)
 
     written = write_id3_tags(mp3_path, track, pick_cover(track))
-    print(f"   🏷️  Tagged: {', '.join(written)}")
+    log(f"   🏷️  Tagged: {', '.join(written)}")
     if track['album']:
-        print(f"   💿 Album: {track['album']}")
+        log(f"   💿 Album: {track['album']}")
     else:
-        print("   ⚠️ No album found for this track on any source (it may be a single or unreleased).")
+        log("   ⚠️ No album found for this track on any source (it may be a single or unreleased).")
 
-def download_spotify(url, bitrate, output_dir, enrich=True):
-    """Handles Spotify track, album, and playlist links."""
+def preview_spotify(url):
+    """
+    Reads a Spotify link without downloading. Returns {'kind', 'name', 'tracks': [...]}.
+    Raises ValueError for a bad link and RuntimeError when Spotify can't be read.
+    """
     spotify = parse_spotify_url(url)
     if not spotify:
-        print("❌ That doesn't look like a Spotify track, album, or playlist link.")
-        return
-
+        raise ValueError("That doesn't look like a Spotify track, album, or playlist link.")
     kind, spotify_id = spotify
-
     try:
-        print(f"\nFetching Spotify {kind} details... Please wait.")
         name, tracks = fetch_spotify_tracks(kind, spotify_id)
     except Exception as e:
-        print(f"❌ Could not read that Spotify {kind}: {e}")
-        print("   (Check the link and your connection. Playlists must be public.)")
-        return
+        raise RuntimeError(f"Could not read that Spotify {kind}: {e} "
+                           "(Check the link and your connection. Playlists must be public.)") from e
+    return {'kind': kind, 'name': name, 'tracks': tracks}
+
+def download_spotify(url, bitrate, output_dir, enrich=True, ffmpeg_dir=None,
+                     cancel=None, track_ids=None):
+    """
+    Handles Spotify track, album, and playlist links.
+    cancel: optional threading.Event; set it to stop after/within the current track.
+    track_ids: optional collection of Spotify track ids; only those tracks are downloaded.
+    Returns {'ok': [label, ...], 'failed': [{'track': label, 'error': msg}], 'folder': path,
+             'cancelled': bool, 'error': msg-or-None}.
+    """
+    global _cancel_event
+    _cancel_event = cancel
+    summary = {'ok': [], 'failed': [], 'folder': output_dir, 'cancelled': False, 'error': None}
+
+    try:
+        preview = preview_spotify(url)
+    except (ValueError, RuntimeError) as e:
+        log(f"❌ {e}")
+        summary['error'] = str(e)
+        return summary
+
+    kind, name, tracks = preview['kind'], preview['name'], preview['tracks']
+    if track_ids is not None:
+        wanted = set(track_ids)
+        tracks = [t for t in tracks if t['spotify_track_id'] in wanted]
 
     total = len(tracks)
     if total == 0:
-        print("⚠️ No downloadable tracks were found.")
-        return
+        log("⚠️ No downloadable tracks were found.")
+        summary['error'] = "No downloadable tracks were found."
+        return summary
 
     target_dir = output_dir
     if name:
         target_dir = os.path.join(output_dir, sanitize_folder_name(name))
         os.makedirs(target_dir, exist_ok=True)
-        print(f"\n📃 Spotify {kind} detected: \"{name}\" ({total} track(s))")
-        print(f"📁 Saving tracks to: {target_dir}")
+        log(f"\n📃 Spotify {kind} detected: \"{name}\" ({total} track(s))")
+        log(f"📁 Saving tracks to: {target_dir}")
+    summary['folder'] = target_dir
+    emit('start', kind=kind, name=name, total=total, folder=target_dir)
 
-    ydl_opts = build_ydl_opts(bitrate, target_dir)
+    ydl_opts = build_ydl_opts(bitrate, target_dir, ffmpeg_dir)
     search_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': True, 'ignoreerrors': True}
 
-    success_count = 0
     with yt_dlp.YoutubeDL(ydl_opts) as ydl, yt_dlp.YoutubeDL(search_opts) as search_ydl:
         for index, track in enumerate(tracks, start=1):
+            if cancel is not None and cancel.is_set():
+                summary['cancelled'] = True
+                break
             label = f"{track['artist']} - {track['title']}"
-            print(f"\n[{index}/{total}] Processing: {label}")
+            log(f"\n[{index}/{total}] Processing: {label}")
+            emit('track_start', index=index, total=total, label=label)
             try:
                 download_track(ydl, search_ydl, track, enrich=enrich)
-                success_count += 1
+                summary['ok'].append(label)
+                emit('track_done', index=index, label=label)
+            except Cancelled:
+                summary['cancelled'] = True
+                break
             except Exception as e:
-                print(f"❌ Skipped \"{label}\" due to an error: {e}")
+                log(f"❌ Skipped \"{label}\" due to an error: {e}")
+                summary['failed'].append({'track': label, 'error': str(e)})
+                emit('track_error', index=index, label=label, error=str(e))
 
-    print(f"\n🎉 Download complete! {success_count}/{total} track(s) saved to: {target_dir}")
-
-
-if __name__ == "__main__":
-    url = input("Enter Spotify Track, Album, or Playlist URL: ").strip()
-    if url:
-        output_folder = get_valid_directory()
-        kbps = get_valid_bitrate()
-        extra_metadata = get_yes_no(
-            "\nFetch extra metadata (genre, BPM, label, ISRC, lyrics, MusicBrainz IDs, ...)? "
-            "Slower, about 5-10 seconds per track")
-        download_spotify(url, kbps, output_folder, enrich=extra_metadata)
+    if summary['cancelled']:
+        log(f"\n⏹️ Cancelled. {len(summary['ok'])}/{total} track(s) saved to: {target_dir}")
     else:
-        print("❌ URL cannot be empty.")
+        log(f"\n🎉 Download complete! {len(summary['ok'])}/{total} track(s) saved to: {target_dir}")
+    _cancel_event = None
+    return summary

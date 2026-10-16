@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Electron app / build output
+app/node_modules/
+app/dist/
+build/
+app/out/

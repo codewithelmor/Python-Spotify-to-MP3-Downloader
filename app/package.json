@@ -1,0 +1,71 @@
+{
+  "name": "spotify-to-mp3",
+  "productName": "Spotify to MP3",
+  "version": "1.0.0",
+  "description": "Download Spotify tracks, albums and playlists as tagged MP3 files",
+  "main": "out/main.js",
+  "scripts": {
+    "build": "tsc && node scripts/copy-static.js",
+    "typecheck": "tsc --noEmit",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^7.0.2"
+  },
+  "build": {
+    "appId": "com.example.spotifytomp3",
+    "productName": "Spotify to MP3",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../build/backend",
+        "to": "backend"
+      },
+      {
+        "from": "../build/bin",
+        "to": "bin"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.music"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "AudioVideo",
+      "maintainer": "Elmor Cabalfin <codewithelmor@gmail.com>",
+      "synopsis": "Spotify to MP3 downloader"
+    }
+  },
+  "author": {
+    "name": "Elmor Cabalfin",
+    "email": "codewithelmor@gmail.com"
+  },
+  "homepage": "https://github.com/example/spotify-to-mp3"
+}

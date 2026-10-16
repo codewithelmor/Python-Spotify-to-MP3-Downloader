@@ -53,7 +53,7 @@ Every source is **best effort**: if a service has no match (or is unreachable), 
 
 When prompted, answer `n` to **"Fetch extra metadata"** to skip enrichment and write only the Spotify fields (faster).
 
-> **MusicBrainz etiquette:** edit `MB_USER_AGENT` near the top of `main.py` and put your own contact email in it, as MusicBrainz requests. Lookups are throttled to 1 per second.
+> **MusicBrainz etiquette:** edit `MB_USER_AGENT` near the top of `backend/core.py` and put your own contact email in it, as MusicBrainz requests. Lookups are throttled to 1 per second.
 
 ---
 
@@ -115,7 +115,7 @@ You must activate the environment before installing dependencies or running the 
 ### 4. Install Dependencies
 Install the required packages from the `requirements.txt` file:
 ```bash
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 ```
 
 ---
@@ -124,13 +124,33 @@ pip install -r requirements.txt
 
 1. Run the Python script:
    ```bash
-   python main.py
+   python backend/cli.py
    ```
 2. Paste a **Spotify track, album, or playlist URL** when prompted.
 3. Provide a **Target Directory** (e.g., `downloads`, `~/Music/Spotify`, or leave blank for the current folder).
 4. Choose your desired **audio quality/bitrate** (128, 192, 256, 320 kbps, or custom).
 5. Choose whether to **fetch extra metadata** (default: yes).
 6. Progress is printed per track (e.g. `[3/12] Processing: ...`). Each finished MP3 is saved as `<artist> - <title>.mp3` with Spotify's tags and album art.
+
+---
+
+## Desktop app (Electron)
+
+`app/` is an Electron + TypeScript UI that runs the Python backend (`backend/backend.py`) and bundles FFmpeg, so end users need neither Python nor FFmpeg installed.
+
+**Develop:** `cd app && npm install && npm start` (uses `python3`/`python` and the FFmpeg on your PATH).
+
+**Package** (PyInstaller cannot cross-compile, so build on the OS you are targeting):
+
+| OS | Command | Output in `app/dist/` |
+|----|---------|-----------------------|
+| Windows | `powershell -ExecutionPolicy Bypass -File scripts\build-all.ps1` | `*Setup*.exe` |
+| Linux | `scripts/build-all.sh` | `*.AppImage`, `*.deb` |
+| macOS | `scripts/build-all.sh` | `*.dmg` (matches your CPU: Apple Silicon or Intel) |
+
+Add `-Clean` (PowerShell) or `--clean` (bash) for a fully fresh build. The scripts need Python 3.10+, Node.js and internet access (FFmpeg and the Electron binary are downloaded). On Debian/Ubuntu also install `python3-venv` and `xz-utils`. `.github/workflows/build.yml` builds all three on GitHub Actions.
+
+Builds are unsigned: Windows SmartScreen and macOS Gatekeeper will warn users (on macOS, right-click the app and choose Open the first time).
 
 ---
 
@@ -142,7 +162,7 @@ pip install -r requirements.txt
   pip install --upgrade yt-dlp
   ```
 
-* **`CERTIFICATE_VERIFY_FAILED` / SSL errors:** Python can't verify HTTPS certificates. Run `pip install -r requirements.txt` again (this installs `truststore` and `certifi`, so the script uses your OS certificate store; Python 3.10+ is needed for `truststore`). On macOS with a python.org install, you can also run `/Applications/Python 3.x/Install Certificates.command`. On a corporate network with a proxy, make sure your company's root certificate is installed in the OS store.
+* **`CERTIFICATE_VERIFY_FAILED` / SSL errors:** Python can't verify HTTPS certificates. Run `pip install -r backend/requirements.txt` again (this installs `truststore` and `certifi`, so the script uses your OS certificate store; Python 3.10+ is needed for `truststore`). On macOS with a python.org install, you can also run `/Applications/Python 3.x/Install Certificates.command`. On a corporate network with a proxy, make sure your company's root certificate is installed in the OS store.
 * **"Could not read that Spotify ...":** Check the link and your internet connection. Playlists must be public. If this suddenly fails for every link, Spotify has probably changed its page format (see the note below); update the script or `yt-dlp`.
 * **Large playlists are cut short:** Spotify's embed pages may list only the first ~100 tracks of a playlist. For bigger playlists, split them into smaller playlists in Spotify.
 * **Playlist tracks have no album name / cover:** For playlists the script looks up each track individually (slower, about a second per track). If that lookup fails for a track, it falls back to the basic title/artist from the playlist listing and the tags are thinner.

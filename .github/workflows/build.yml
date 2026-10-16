@@ -1,0 +1,46 @@
+name: Build installers
+
+# PyInstaller cannot cross-compile, so each OS builds on its own runner.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: windows
+            paths: app/dist/*Setup*.exe
+          - os: ubuntu-latest
+            artifact: linux
+            paths: |
+              app/dist/*.AppImage
+              app/dist/*.deb
+          - os: macos-latest   # Apple Silicon
+            artifact: macos-arm64
+            paths: app/dist/*.dmg
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: scripts/build-all.ps1
+      - name: Build (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: bash scripts/build-all.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spotify-to-mp3-${{ matrix.artifact }}
+          path: ${{ matrix.paths }}
+          if-no-files-found: error
