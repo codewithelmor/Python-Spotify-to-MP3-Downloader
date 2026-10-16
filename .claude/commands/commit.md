@@ -1,7 +1,7 @@
 ---
 description: Compose a Conventional Commits message and prepare the git commit command (does not run it)
 argument-hint: [optional hint: scope, ticket number, or extra context]
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*)
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*)
 ---
 
 # Prepare a Commit Message
@@ -18,11 +18,10 @@ The user will review it and press Enter to commit by themselves.
 
 ## Context
 
-- Current branch: !`git branch --show-current`
-- Status: !`git status --short`
+- Branch and status (works on any branch name, detached HEAD, or a repo with no commits yet): !`git status --short --branch`
 - Staged changes: !`git diff --cached --stat`
 - Unstaged changes: !`git diff --stat`
-- Recent commits (for style and scope reference): !`git log --oneline -10`
+- Recent commits (for style and scope reference; may be empty in a new repo): !`git log --oneline -10 --all`
 
 User hint (optional): $ARGUMENTS
 
@@ -32,6 +31,8 @@ User hint (optional): $ARGUMENTS
    - If there are staged changes, use `git diff --cached` to read them. Compose the message for the staged changes **only**.
    - If nothing is staged but there are unstaged or untracked files, do not guess. Tell the user nothing is staged, and prepare the `git add` command (with specific file paths, not `git add .`) followed by the commit command, both for the user to run.
    - If there are no changes at all, say so and stop.
+   - If the repository has no commits yet (status shows "No commits yet"; the recent commits list is empty), this is the first commit. That is normal, not an error. Do not run `git log` without `--all`, since it fails on an empty repo. Compose the message from the staged files; for a fresh project, `chore: initial commit` (or `feat: ...` if it clearly delivers a feature) is fine.
+   - Never assume a branch name such as `main` or `master`. Use whatever the status line shows, and do not add a branch name to the commit command.
 2. **Read the actual diff** (`git diff --cached`, or `git diff` when preparing a `git add` suggestion) so the message is based on the real changes, not only on the file names.
 3. **Check if the changes should be split.** If the diff mixes unrelated changes (for example a feature and an unrelated refactor), recommend separate commits. Prepare one `git add` and `git commit` pair for each commit.
 4. **Compose the message** using the format and rules below.
@@ -68,7 +69,7 @@ Choose the type in this order: new behavior = `feat`; corrected behavior = `fix`
 ### Scope
 
 - Optional. Short lowercase noun for the affected area, such as `auth`, `api`, `ui`, `db`, `deps`.
-- Prefer a scope already used in the recent commits.
+- Prefer a scope already used in the recent commits (if there are none, choose one from the changed paths or omit it).
 - Omit it when the change touches many areas.
 
 ### Description (first line)
