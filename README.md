@@ -208,7 +208,7 @@ Builds are unsigned: Windows SmartScreen and macOS Gatekeeper will warn users (o
 ## Project Structure
 
 ```text
-Python-Spotify-to-MP3-Downloader/
+Spotify-to-MP3-Downloader-App/
 ├── .claude
 │   ├── commands
 │   │   └── commit.md
